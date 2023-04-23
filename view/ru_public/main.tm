@@ -17,7 +17,7 @@
 
 
 		<div class = "page" id = "one">
-			<div class="names"><h1 class="text-start pt-3 pb-3"><span>LIMB1000 MAGAZINE</span></h1></div>
+			<div class="names"><h1 class="text-start pt-3 pb-3"><span>LIMB1000</span></h1></div>
 			<div class="description">
 				<h1 id = "php">PHP 8.0</h1>
 				<h1 id = "bootstrap">BOOTSTRAP 5</h1>
