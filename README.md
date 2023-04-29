@@ -304,9 +304,250 @@ $result = $ri -> insert($value);
 
 # 7. Шаблонизатор
 # 7.1. Схема построения .tm
+view
+Все пользовательские шаблоны хранятся в view/public, где систематизируются по папкам по названию страниц, либо иначе.
+Существует две распространенных замены в шаблонизаторе. Первая - повторяющаяся, например статьи на сайте. Вторая - неповторяющаяся, например 'title'. В случае повторяющегося элемента, в котором требуется лишь замена из подготовленного массива, достаточно его в шаблоне выделить следующим образом:
+```
+^start_repeat_menu^
+%name%  %shema_postroeniya_tm%
+<a href="/category/% shema_postroeniya_tm %" class="list-group-item list-group-item-action"> %name% </a>
+^end_repeat_menu^
+```
+Внутри ограничений start - end используются стандартные методы обертки заменяемых элементов, то есть: '%'. Важно понимать, что любой повторяющийся компонент на сайте, оформляется, как указано выше. Важно учесть три правила:
+1. ^start_repeat_NAME^, где name - произвольное имя для повторяющейся части.
+2. Второй строкой ОБЯЗАТЕЛЬНО идет перечисление через пробел требующих замены шаблонов.
+3. Имена предпочтительней выбирать в соответствии с названиями в таблице, чтобы упростить процесс замены и настройки передающего массива.
+Limb устроен таким образом, что в нем приветсвуется двойная замена. То есть сразу собирается статическая - неизменная для одного пользователя, часть страницы (staticPage.php, staticTable.php). На ее основании идет сборка остальных страниц.
+Конструкцию с выражением ^start_repeat_NAME^ можно использовать и непосредственно на самой странице, так и вынеся ее в отдельный сегмент в формате .tm. Для каждой страницы рекомендуется создавать свою папку с "сегментами". Имя файла должно совпадать с заменяемым шаблоном на странице %user_name% -> папка user(любое удобное имя, можно как название страницы) -> user_name.tm (обязательно).
+Есть два устойчивых выражения, применение которых зарезервировано % name_site% и % module_paginate%. Единственная разница в том, что paginate необходимо заменять самостоятельно, а name_site подставляется из setting.ini
 # 7.2. Сопровождение шаблона в .php
+Есть 4 файла:
+**layouts/main.tm (основной)**
+```
+%title% - %name%
+%art%
+<ul>
+^start_repeat_menu^
+%st% %folder% `
+<li>%folder% %st%</li>
+^end_repeat_menu^
+</ul>
+%dies%
+%content%
+```
+
+**footer/art.tm (должен пойти на место %art%)**
+```
+пустая строка
+%category% %name_subcategory%
+<h1>%category%</h1>
+<h3>%name_subcategory%</h3>
+^start_repeat_frs^
+%name_table%
+<p>%name_table%</p>
+^end_repeat_frs^
+```
+
+
+**footer/content.tm (должен пойти на место %content%)**
+```
+^start_repeat_content^
+%name% %text% `
+<h3>%name%</h3>
+<p>%text%</p>
+^end_repeat_content^
+```
+
+**footer/dies.tm (должен пойти на место %dies%)**
+```
+пустая строка
+%name% %text%
+<h3>%name%</h3>
+<p>%text%</p>
+```
+
+Для сборки страницы main.tm необходимо:
+
+```
+$content = [["name" => "vio", ...], [...], ....];#такого же формата массив 
+#возвращается после работы с базой данных
+$template = [
+	"norepeat" => ["%title%", "%name%"],
+	"repeat" => ["menu"],
+	"internal" => [
+                ["name" => "content", "folder" => "footer"], 
+                ["name" => "art", "folder" => "footer"], 
+                ["name" => "dies", "folder" => "footer"]
+         ],
+	"repeat_tm" => ["frs"]
+];
+$data = [
+        "norepeat" => ["title" => "Главная страница", "name" => "Перечень"],
+        "internal" => [$content, $art, $dies],
+        "repeat_tm" => [$frs]
+];
+$limb = new WorkerLimb();
+$render = $limb -> TemplateMaster($template, $data, $auth, $this -> html);
+return $render;
+```
+
 # 8. Использование стилей(сss) и скриптов(js)
+**Подключение существующих стилей**
+Предположим, что у вас уже есть готовые файлы расширений js и css, которые должны подключаться либо вверх html страницы, либо вниз. Ваши файлы стилей конечно хранятся там, где это преусмотрено, то есть в style/public/css(js). Для того чтобы их подключить необходимо:
+1) В теге head, а также внизу страницы(в необходимом месте) вставить два "шаблонособирателя": %script_top% и %script_bottom%
+2) Прописать правила замены в файл view/public/include_style.ini:
+```
+;article page
+article_top = "bootstraptop&jquerytop&clicks_button.js&dtbs.css";
+article_bottom = "";
+```
+Где article_.... это название собираемой страницы из route. Главная страница имеет всегда название main. В файле к каждой странице должно быть прописано и top и bottom, даже если один из них пуст.
+bootstraptop, jquerytop - это названия подключаемых файлов из папки datastore/include_style/.... Для создания своего подобного файла, необходимо прописать в нем необходимое подключение, например шрифты и сохранить с любым именем, но расширением .tm в указанный каталог. При подключении обращаться к нему без расширения, как в примере выше.
+
 # 9. Использование JSON и AJAX
+**Расположение важных файлов**
+Все файлы, которые помогают использовать json располагаются в app/modules/aj. К таким файлам относится класс Jon, файл которого, jon.php самолично обрабатывает запросы приходящие от браузера методом post.
+**Принцип работы**
+Файл, который отправляет запрос выглядит примерно так:
+```
+$(document).on("click", ".view_answ", function(event){
+event.preventDefault();
+var idElement = event.target.id;
+var id_html = "#two_"+idElement;
+$.ajax({
+    url: '/app/modules/aj/Jon.php',
+    method: 'POST',
+    data: {"id" : idElement, "nameAj" : "loadCommentary"},
+    }).done(function(data){
+        $(id_html).html(data);
+    });
+});
+```
+При наличии в массиве $_POST переменной под nameAj, а также наличии уже созданного метода в классе Jon с именем, в данном случае loadCommentary создается объект класса Jon. Весь пришедший массив $_POST записывается в переменную $post_nohtml с предобработкой функцией htmlspecialchars. Исключения для прохождения через htmlspecialchars составляют лишь имена массива $_post ключи к которым перечисленны в массиве $ex.
 # 10. Мультиязычность
+Обеспечение мультиязычности в текущей версии LIMB обеспечивается множеством нюансов. Поочереди:
+**route.php**
+При любом входе в веб-приложение создается COOKIE переменная language содержащая информацию о языке в виде: ru_.
+```
+if(!isset($_COOKIE["language"]))
+setcookie("language", "ru_", time() + 172800, '/');
+```
+Далее идет маршрут позволяющий переключать языки, простой перезаписью переменной в сессии. Это организовано таким образом, что берется массив заранее определенный в setting.ini. То есть маршруты: lang/ru_, lang/eng_ являются переключающими на соответствующий язык.
+```
+elseif($route_arr[0] == "lang")
+{
+$this -> forms = true;
+if(isset($route_arr[1]))
+	{
+		$ini = parse_ini_file(__DIR__."/../../setting.ini");
+		$lang_group = explode(", ", $ini["language"]);
+		if($this -> langGroup($lang_group, $route_arr[1]))
+		{
+              		setcookie("language", $route_arr[1], time() + 172800, '/');
+			header("Location: ".$_SERVER["HTTP_REFERER"]);
+			exit();
+		}
+		else
+		{
+			header("Location: ".$_SERVER["HTTP_REFERER"]);
+			exit();
+		}
+	}
+}
+
+```
+**ru_page и ru_public**
+Второй предустановленный нюанс это текхнология размещения и названия папок с шаблонами различных языков. То есть каждый язык, предопределенный в setting.ini должен иметь: view/ru_page.ini, view/ru_public. Если из языков предусмотрен лишь русский, то все шаблоны располагаются в папке ru_public. Вообще добавление второго, третьего языка лучше осуществлять лишь, после собрания сайта полностью работающего на одном языке, путем копирования, перевода и переименования основного рабочего public. Естественно собирать сайт на одну папку public необходимо учитывая следующие рекомендации.
+**StaticPage.php&StaticTable.php**
+Следуя принципу разделения сборки сайта на две части: статической(неизменной) части и изменяющейся, предполагаю расположение языковой панели именно в сборке этих файлов.
+```
+if(isset($_COOKIE['language'])) $this -> language = $_COOKIE['language'];
+else 
+{
+	$this -> language = "ru_";
+}
+#вверху конструктора, объявление переменной $this-> language, 
+#для дальнейшего использования в путях(это касается всех файлов), 
+#ниже касающееся исключительно staticpage. 
+#здесь берется массив возможных языков из setting.ini
+#и сравнивается с текущим установленным языком в cookies
+#тот язык который установлен в свой шаблон получает новый стиль,
+#для удобства видимости 
+$language_group = $this -> setting["language"];
+$language_group = explode(",", $language_group);
+
+for($i = 0; $i < count($language_group); $i++)
+{
+	if(trim($language_group[$i]) == $this -> language)
+		$language_group[$i] = "style='border-bottom: 1px solid #fff;'";
+
+	else
+		$language_group[$i] = "";
+}
+```
+Массив, записанный строкой в setting.ini должен иметь ту же очередность, что и массив записанный в tpage под замену шаблона: "%site%", "%lang_ru%", "%lang_eng%". Именно такого рода рекомендуется располагать в конечном виде в языковой панели. Языковая панель подключается в .tm
+**main.tm**
+```
+<a class="lang " href="https://limb.website/lang/ru_" %lang_ru%="">RU</a>|
+<a class="lang " href="https://limb.website/lang/eng_" %="" lang_eng="">ENG</a>
+```
+**file_get_contents() и пр.**
+Все пути, должны содержать перед public вставку, корректирующие используемый язык
+```
+$html = file_get_contents(__DIR__."/../../view/".$this -> language."public/main.tm");
+```
 # 11. Добавление комментариев к странице
+Модуль состоит из: app/modules/commentary{CommentaryTable.php CommentaryPage.php}. Файлов шаблона public/commentary. И js-обеспечение, двумя файлами: ajax_commentary.js clicks_button.js.
+Для добавления комментариев необходимо создать таблицу:
+```
+table_name = '39t_commentary';
+id = 'this_id';
+id_article = 'int(11)';
+name = 'varchar(100)';
+text = 'text';
+levels = 'text';
+nesting = 'int(11)';
+code = 'text';
+date_creation = 'this_date';
+```
+Где levels - это code комментария к которому относится данный комментарий, nesting - текущая вложенность данного комментария, code - уникальный ключ комментария, id_article - id статьи к которой комментарий относится.
+**Маршруты в route.php**
+Для будущей организации админ-панельки под редактирование, удаление комментариев для auth = admin.
+**Form/FormRoute.php FormBase.php**
+```
+#FormRoute
+elseif($name_form == "commentarynew")
+{
+	$result = $this -> newCommentary();
+}
+
+#FormBase
+protected function newCommentary()
+{
+	$ar = CommCommentaryTable::addCommentary($this -> data);
+	return $ar;
+}
+#реализация добавления комментария
+```
+**a/Jon.php**
+```
+public function loadCommentary()
+{
+	$ct = new ComCommentaryTable();
+
+	$result = $ct -> LoadCommentary($this -> post_nohtml["id"]);
+
+	echo $result;
+}
+#для дозагрузки комментариев по клику без обновления страницы
+```
+**Подключение**
+В нужной части страницы (элемента страницы .tm) необходимо прописать %commentary% и произвести замену на:
+```
+$com = new CommentaryTable();
+$commentary = $com -> renderCommentary($id, $auth);
+```
+Где $id - id статьи, под которую выводятся комментарии, а $auth - идентификатор авторизации.
+Настройка отображения комментариев через setting.ini. nesting - максимальная вложенность комментариев, по умолчанию 2, comm_paginate - количество одновременно выводимых комментариев на странице.
+
 # 12. Телеграм бот
